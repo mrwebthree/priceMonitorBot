@@ -1,54 +1,38 @@
-import requests  # <--- Add this line
-import time
-import threading
-from telegram_bot import send_telegram_menu, send_telegram_message
-from monitor import monitor_price
-from config import CHAT_ID, BOT_TOKEN
-from flask import Flask, request
+from flask import Flask, request, jsonify
+import os
+import requests
 
 app = Flask(__name__)
-monitor_thread = None
-stop_flag = False
 
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def webhook():
-    global monitor_thread, stop_flag
-    data = request.json
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+CHAT_ID = os.getenv("CHAT_ID")
 
-    if "callback_query" in data:
-        callback_data = data['callback_query']['data']
-        chat_id = data['callback_query']['message']['chat']['id']
-
-        if chat_id != int(CHAT_ID):
-            return "Unauthorized", 403
-
-        if callback_data == "start":
-            if monitor_thread and monitor_thread.is_alive():
-                send_telegram_message("⚠️ Monitoring already running.")
-            else:
-                stop_flag = False
-                monitor_thread = threading.Thread(target=monitor_price, args=("bitcoin",))
-                monitor_thread.start()
-                send_telegram_message("✅ Monitoring started.")
-
-        elif callback_data == "stop":
-            stop_flag = True
-            send_telegram_message("🛑 Monitoring stopped.")
-        
-        elif callback_data == "status":
-            if monitor_thread and monitor_thread.is_alive():
-                send_telegram_message("✅ Monitoring is running.")
-            else:
-                send_telegram_message("❌ Monitoring is not running.")
-
-    return "OK", 200
-
-def setup_webhook():
+def set_webhook():
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
-    webhook_url = f"https://your-server.com/{BOT_TOKEN}"  # Replace with your ngrok URL if local
-    requests.post(url, json={"url": webhook_url})  # <-- This line failed because 'requests' was missing
+    webhook_url = f"{WEBHOOK_URL}/webhook"  # Ensure "/webhook" path is correct
+    response = requests.post(url, json={"url": webhook_url})
+    print("Webhook Set Response:", response.json())
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    data = request.json
+    print("Received Update:", data)
+
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"]["text"]
+
+        if text == "/start":
+            send_message(chat_id, "✅ Starting price monitor bot...")
+
+    return jsonify({"status": "ok"})
+
+def send_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
+    requests.post(url, json=payload)
 
 if __name__ == "__main__":
-    setup_webhook()
-    send_telegram_menu()
+    set_webhook()  # This triggers on start
     app.run(host="0.0.0.0", port=5000)
