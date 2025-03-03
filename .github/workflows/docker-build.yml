@@ -3,7 +3,7 @@ name: Build Docker Image and Notify Telegram
 on:
   push:
     branches:
-      - main  # Trigger only on main branch pushes
+      - main
 
 jobs:
   build:
