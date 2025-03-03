@@ -1,3 +1,3 @@
 #!/bin/bash
 docker build -t price-monitor .
-docker run --env-file .env price-monitor
+docker run -d --env-file .env price-monitor
