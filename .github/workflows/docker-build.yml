@@ -1,9 +1,9 @@
-name: Build Docker Image
+name: Build Docker Image and Notify Telegram
 
 on:
   push:
     branches:
-      - main  # Trigger on push to main branch
+      - main  # Trigger only on main branch pushes
 
 jobs:
   build:
@@ -18,3 +18,8 @@ jobs:
 
     - name: Build Docker Image
       run: docker build -t price-monitor-bot .
+
+    - name: Send Telegram Notification
+      run: |
+        MESSAGE="✅ New Docker build completed successfully for priceMonitorBot.\nCommit: ${{ github.event.head_commit.message }}\nRepo: ${{ github.repository }}"
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" -d "chat_id=${{ secrets.CHAT_ID }}&text=${MESSAGE}"
