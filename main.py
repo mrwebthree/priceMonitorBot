@@ -1,3 +1,4 @@
+import requests  # <--- Add this line
 import time
 import threading
 from telegram_bot import send_telegram_menu, send_telegram_message
@@ -44,8 +45,8 @@ def webhook():
 
 def setup_webhook():
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
-    webhook_url = f"https://your-server.com/{BOT_TOKEN}"  # <-- Replace with your actual server URL if hosting
-    requests.post(url, json={"url": webhook_url})
+    webhook_url = f"https://your-server.com/{BOT_TOKEN}"  # Replace with your ngrok URL if local
+    requests.post(url, json={"url": webhook_url})  # <-- This line failed because 'requests' was missing
 
 if __name__ == "__main__":
     setup_webhook()
