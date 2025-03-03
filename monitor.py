@@ -1,68 +1,44 @@
-import os
 import time
 import requests
-from datetime import datetime
-from dotenv import load_dotenv
+from telegram_bot import send_telegram_message
+from config import CHECK_INTERVAL
 
-# Load environment variables
-load_dotenv()
+def get_price_and_change(symbol):
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd&include_24hr_change=true"
+    response = requests.get(url).json()
 
-# Config
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 60))
-SYMBOLS = os.getenv("SYMBOLS", "bitcoin").split(",")
+    if symbol not in response:
+        raise Exception(f"Failed to fetch price for {symbol}. Response: {response}")
 
-if not BOT_TOKEN or not CHAT_ID:
-    raise ValueError("BOT_TOKEN and CHAT_ID must be set in .env file!")
+    price = response[symbol]['usd']
+    change_24hr = response[symbol]['usd_24h_change']
+    return price, change_24hr
 
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message}
-    try:
-        requests.post(url, json=payload).raise_for_status()
-    except requests.exceptions.RequestException as e:
-        log_error(f"Telegram Error: {e}")
+def monitor_price(symbol):
+    last_reported_change = None
+    send_telegram_message(f"✅ Monitoring started for {symbol.upper()}. Checking every {CHECK_INTERVAL} seconds.")
 
-def log_error(message):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open("monitor_errors.log", "a") as file:
-        file.write(f"[{timestamp}] {message}\n")
-
-class PriceMonitor:
-    def __init__(self, symbol):
-        self.symbol = symbol.lower().strip()
-        self.last_reported_change = None
-
-    def fetch_price_and_change(self):
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={self.symbol}&vs_currencies=usd&include_24hr_change=true"
-        response = requests.get(url, timeout=10).json()
-        price = response[self.symbol]['usd']
-        change_24h = response[self.symbol]['usd_24h_change']
-        return price, change_24h
-
-    def check_price(self):
-        try:
-            price, change_24h = self.fetch_price_and_change()
-            if self.last_reported_change is None:
-                self.last_reported_change = change_24h
-            else:
-                if abs(change_24h - self.last_reported_change) >= 5:
-                    direction = "📈 UP" if change_24h > self.last_reported_change else "📉 DOWN"
-                    send_telegram_message(
-                        f"🚨 {self.symbol.upper()} Alert!\nPrice: ${price:.2f}\n24h Change: {change_24h:.2f}%\nDirection: {direction}"
-                    )
-                    self.last_reported_change = change_24h
-        except Exception as e:
-            log_error(f"{self.symbol.upper()} Error: {e}")
-
-def run_monitor():
-    send_telegram_message(f"✅ Monitoring started for: {', '.join(SYMBOLS)}")
-    monitors = [PriceMonitor(symbol) for symbol in SYMBOLS]
     while True:
-        for monitor in monitors:
-            monitor.check_price()
-        time.sleep(CHECK_INTERVAL)
+        try:
+            _, change_24hr = get_price_and_change(symbol)
 
-if __name__ == "__main__":
-    run_monitor()
+            if last_reported_change is None:
+                last_reported_change = change_24hr
+
+            else:
+                change_diff = abs(change_24hr - last_reported_change)
+                if change_diff >= 5:
+                    direction = "📈 UP" if change_24hr > last_reported_change else "📉 DOWN"
+                    message = (
+                        f"🚨 {symbol.upper()} 24h Change Alert!\n\n"
+                        f"New 24h Change: {round(change_24hr, 2)}%\n"
+                        f"Direction: {direction}"
+                    )
+                    send_telegram_message(message)
+                    last_reported_change = change_24hr
+
+            time.sleep(CHECK_INTERVAL)
+
+        except Exception as e:
+            send_telegram_message(f"⚠️ Error: {e}")
+            time.sleep(30)
